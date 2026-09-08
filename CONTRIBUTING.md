@@ -4,22 +4,44 @@
 
 Do not convert implementation into evidence. Code being present, compiling or executing does not establish that the intended behaviour is correct.
 
-## Development Sequence
+## Frozen Engineering Gate Sequence
 
-For each new capability:
+For each controlled capability, use this sequence:
 
-1. State the capability being introduced.
-2. Freeze the smallest sufficient behavioural contract.
-3. Implement the capability independently where practical.
-4. Construct positive tests.
-5. Construct boundary and degenerate tests.
-6. Construct independent reference checks.
-7. Introduce deliberately defective implementations where useful.
-8. Confirm that the tests reject those defects.
-9. Assign PASS, FAIL or UNRESOLVED from executed evidence.
-10. Integrate only after standalone requirements pass.
-11. Rerun affected regression tests.
-12. Record the result.
+> contract → support envelope → implementation → adversarial attack → static/security/quality checks → compatibility matrix → independent oracle → clean CI → external review → only then PASS
+
+No earlier stage independently authorises PASS.
+
+1. Freeze the smallest sufficient behavioural contract.
+2. Freeze the support envelope being claimed: dtypes, devices, runtime versions, shapes, magnitude ranges and other material boundaries.
+3. Implement only the capability required by the open gate.
+4. Construct adversarial attacks against the claim, including boundary, degenerate and deliberately defective controls where useful.
+5. Run static, security and repository-quality checks.
+6. Exercise every runtime configuration the repository advertises as supported.
+7. Compare against an independent oracle where one exists.
+8. Obtain clean CI evidence for the frozen attacks and checks.
+9. Perform a pre-review against the classes of criticism expected from independent reviewers such as Copilot, Codex and CodeRabbit.
+10. Submit to external review.
+11. Assign PASS only if the claim survives the applicable evidence above.
+12. Integrate only after standalone requirements pass, then rerun affected regression tests and record the result.
+
+A green mathematical test suite is evidence, not gate authority. A valid defect found during review keeps the gate FAIL or UNRESOLVED until the defect is represented by a reproducible attack, corrected and rerun through the applicable sequence.
+
+## Adversarial Pre-Review
+
+Before a public PR is described as PASS, perform an internal review that represents at least these criticism classes:
+
+- contract/implementation mismatch
+- support-envelope gaps, including dtype, magnitude and non-finite values
+- forward and backward numerical correctness
+- boundary and degenerate behaviour
+- compatibility between advertised and exercised runtimes
+- workflow least privilege and credential handling
+- static analysis and repository-quality findings
+- missing or weak independent-oracle evidence
+- stale gate status, unsupported completion claims or integration authority
+
+This is not a bot-specific optimisation step. The purpose is to represent the same classes of engineering criticism before publication.
 
 ## Scope Control
 
@@ -28,6 +50,10 @@ Work only on the current open gate. Do not introduce unrelated architectural imp
 ## Claims
 
 Use evidence-strength-appropriate language. Prefer claims such as “passes the tested cases” or “matches the reference within the frozen tolerance”. Preserve failures and uncertainty.
+
+The project standard is:
+
+> ChatGPT made a claim, built the strongest practical case against its own claim, and only published the claim that survived.
 
 ## AI-Assisted Development
 
