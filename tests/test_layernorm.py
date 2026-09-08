@@ -197,6 +197,7 @@ def test_module_initialises_identity_affine_parameters():
         (lambda: layer_norm(torch.tensor(1.0), torch.ones(1), torch.zeros(1)), ValueError),
         (lambda: layer_norm(torch.ones(2, 3), torch.ones(4), torch.zeros(4)), ValueError),
         (lambda: layer_norm(torch.ones(2, 3, dtype=torch.int64), torch.ones(3), torch.zeros(3)), TypeError),
+        (lambda: layer_norm(torch.ones(2, 3, dtype=torch.float32), torch.ones(3), torch.zeros(3)), ValueError),
         (lambda: layer_norm(torch.ones(2, 3), torch.ones(3), torch.zeros(3), 0.0), ValueError),
     ],
 )
