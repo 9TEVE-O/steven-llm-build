@@ -15,6 +15,7 @@ EPS = 1e-5
 
 
 def _manual_reference(x, gamma, beta, eps=EPS):
+    """Compute the direct LayerNorm reference equations for finite differences."""
     mean = x.mean(dim=-1, keepdim=True)
     centred = x - mean
     variance = centred.square().mean(dim=-1, keepdim=True)
@@ -22,6 +23,7 @@ def _manual_reference(x, gamma, beta, eps=EPS):
 
 
 def _finite_difference(fn, value, step=1e-6):
+    """Estimate a gradient with independent central finite differences."""
     grad = torch.empty_like(value)
     flat_grad = grad.reshape(-1)
     for i in range(value.numel()):
@@ -35,6 +37,7 @@ def _finite_difference(fn, value, step=1e-6):
 
 @pytest.mark.parametrize("shape", [(4,), (3, 4), (2, 3, 4)])
 def test_forward_matches_pytorch(shape):
+    """Match PyTorch LayerNorm forward values across supported tensor ranks."""
     torch.manual_seed(13)
     x = torch.randn(shape, dtype=torch.float64)
     gamma = torch.randn(shape[-1], dtype=torch.float64)
@@ -47,6 +50,7 @@ def test_forward_matches_pytorch(shape):
 
 
 def test_backward_matches_pytorch_for_input_gamma_and_beta():
+    """Match PyTorch gradients for input and both affine parameters."""
     torch.manual_seed(1301)
     shape = (2, 3, 5)
     upstream = torch.randn(shape, dtype=torch.float64)
@@ -68,6 +72,7 @@ def test_backward_matches_pytorch_for_input_gamma_and_beta():
 
 
 def test_gradients_match_independent_central_finite_differences():
+    """Match independently estimated gradients for input, gamma and beta."""
     torch.manual_seed(1302)
     x0 = torch.randn((2, 3), dtype=torch.float64)
     gamma0 = torch.randn(3, dtype=torch.float64)
@@ -96,6 +101,7 @@ def test_gradients_match_independent_central_finite_differences():
 
 
 def test_sequence_position_isolation():
+    """Changing one sequence position must not alter another position's result."""
     x = torch.tensor(
         [[[1.0, 2.0, 4.0, 8.0], [2.0, 3.0, 5.0, 9.0], [4.0, 6.0, 7.0, 11.0]]],
         dtype=torch.float64,
@@ -112,6 +118,7 @@ def test_sequence_position_isolation():
 
 
 def test_batch_isolation():
+    """Changing one batch item must not alter another batch item's result."""
     x = torch.tensor(
         [[[1.0, 2.0, 4.0], [3.0, 5.0, 8.0]], [[10.0, 20.0, 40.0], [30.0, 50.0, 80.0]]],
         dtype=torch.float64,
@@ -128,6 +135,7 @@ def test_batch_isolation():
 
 
 def test_features_are_coupled_within_one_normalised_vector():
+    """Changing one feature must affect peer features within the same normalised vector."""
     x = torch.tensor([[1.0, 2.0, 4.0, 8.0]], dtype=torch.float64)
     gamma = torch.ones(4, dtype=torch.float64)
     beta = torch.zeros(4, dtype=torch.float64)
@@ -141,6 +149,7 @@ def test_features_are_coupled_within_one_normalised_vector():
 
 
 def test_feature_dimension_one_is_finite_and_has_expected_gradients():
+    """Handle the D=1 degenerate case with finite output and exact gradients."""
     x = torch.tensor([[[2.0]], [[-7.0]]], dtype=torch.float64, requires_grad=True)
     gamma = torch.tensor([3.0], dtype=torch.float64, requires_grad=True)
     beta = torch.tensor([1.25], dtype=torch.float64, requires_grad=True)
@@ -157,6 +166,7 @@ def test_feature_dimension_one_is_finite_and_has_expected_gradients():
 
 
 def test_constant_nonzero_vectors_are_finite_and_reduce_to_beta():
+    """Constant vectors must normalise to zero and therefore reduce to beta."""
     x = torch.full((2, 3, 4), 7.5, dtype=torch.float64)
     gamma = torch.tensor([0.5, -1.0, 2.0, 3.0], dtype=torch.float64)
     beta = torch.tensor([-3.0, -1.0, 2.0, 8.0], dtype=torch.float64)
@@ -174,6 +184,7 @@ def test_constant_nonzero_vectors_are_finite_and_reduce_to_beta():
     ],
 )
 def test_small_variance_and_large_safe_magnitudes_match_pytorch(x):
+    """Match PyTorch for small variance and large float64 magnitudes that remain numerically safe."""
     gamma = torch.tensor([1.0, -0.5, 2.0, 0.25], dtype=torch.float64)
     beta = torch.tensor([0.0, 1.0, -1.0, 3.0], dtype=torch.float64)
 
@@ -184,6 +195,7 @@ def test_small_variance_and_large_safe_magnitudes_match_pytorch(x):
 
 
 def test_module_initialises_identity_affine_parameters():
+    """Initialise gamma to one and beta to zero."""
     module = LayerNorm(4).double()
     torch.testing.assert_close(module.gamma, torch.ones(4, dtype=torch.float64))
     torch.testing.assert_close(module.beta, torch.zeros(4, dtype=torch.float64))
@@ -197,16 +209,18 @@ def test_module_initialises_identity_affine_parameters():
         (lambda: layer_norm(torch.tensor(1.0), torch.ones(1), torch.zeros(1)), ValueError),
         (lambda: layer_norm(torch.ones(2, 3), torch.ones(4), torch.zeros(4)), ValueError),
         (lambda: layer_norm(torch.ones(2, 3, dtype=torch.int64), torch.ones(3), torch.zeros(3)), TypeError),
-        (lambda: layer_norm(torch.ones(2, 3, dtype=torch.float32), torch.ones(3), torch.zeros(3)), ValueError),
+        (lambda: layer_norm(torch.ones(2, 3, dtype=torch.float32), torch.ones(3, dtype=torch.float64), torch.zeros(3, dtype=torch.float64)), ValueError),
         (lambda: layer_norm(torch.ones(2, 3), torch.ones(3), torch.zeros(3), 0.0), ValueError),
     ],
 )
 def test_invalid_contract_inputs_fail_explicitly(call, error):
+    """Reject each frozen invalid-input class with the specified exception type."""
     with pytest.raises(error):
         call()
 
 
 def _negative_control_fixture():
+    """Return a non-symmetric fixture capable of exposing defective LayerNorm variants."""
     x = torch.tensor(
         [
             [[1.0, 2.0, 4.0, 8.0], [2.0, 5.0, 9.0, 15.0], [3.0, 7.0, 10.0, 21.0]],
@@ -220,6 +234,7 @@ def _negative_control_fixture():
 
 
 def test_negative_control_wrong_axis_is_detected():
+    """Detect a mutant that normalises over the wrong axis."""
     x, gamma, beta = _negative_control_fixture()
     correct = layer_norm(x, gamma, beta)
     mean = x.mean(dim=-2, keepdim=True)
@@ -229,6 +244,7 @@ def test_negative_control_wrong_axis_is_detected():
 
 
 def test_negative_control_unbiased_variance_is_detected():
+    """Detect a mutant that uses sample rather than population variance."""
     x, gamma, beta = _negative_control_fixture()
     correct = layer_norm(x, gamma, beta)
     mean = x.mean(dim=-1, keepdim=True)
@@ -238,6 +254,7 @@ def test_negative_control_unbiased_variance_is_detected():
 
 
 def test_negative_control_epsilon_outside_sqrt_is_detected():
+    """Detect a mutant that places epsilon outside the square root."""
     x, gamma, beta = _negative_control_fixture()
     correct = layer_norm(x, gamma, beta)
     mean = x.mean(dim=-1, keepdim=True)
@@ -247,6 +264,7 @@ def test_negative_control_epsilon_outside_sqrt_is_detected():
 
 
 def test_negative_control_missing_centring_is_detected():
+    """Detect a mutant that omits mean centring."""
     x, gamma, beta = _negative_control_fixture()
     correct = layer_norm(x, gamma, beta)
     mean = x.mean(dim=-1, keepdim=True)
@@ -256,6 +274,7 @@ def test_negative_control_missing_centring_is_detected():
 
 
 def test_negative_control_wrong_affine_broadcast_is_detected():
+    """Detect a mutant that collapses affine parameters before broadcasting."""
     x, gamma, beta = _negative_control_fixture()
     correct = layer_norm(x, gamma, beta)
     mean = x.mean(dim=-1, keepdim=True)
@@ -266,6 +285,7 @@ def test_negative_control_wrong_affine_broadcast_is_detected():
 
 
 def test_negative_control_detached_gamma_gradient_is_detected():
+    """Detect a mutant that detaches gamma from gradient flow."""
     x = torch.tensor([[1.0, 2.0, 4.0]], dtype=torch.float64, requires_grad=True)
     gamma = torch.tensor([0.5, 1.0, 1.5], dtype=torch.float64, requires_grad=True)
     beta = torch.zeros(3, dtype=torch.float64, requires_grad=True)
